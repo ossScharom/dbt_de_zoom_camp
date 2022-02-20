@@ -1,9 +1,15 @@
 {{ config(materialized="view") }}
-
+with tripdata as 
+(
+  select *,
+    row_number() over(partition by vendorid, tpep_pickup_datetime) as rn
+  from {{ source('staging','yellow_tripdata') }}
+  where vendorid is not null 
+)
 select 
 
 -- identifiers
-    {{ dbt_utils.surrogate_key(['vendorid', 'lpep_pickup_datetime']) }} as tripid,
+    {{ dbt_utils.surrogate_key(['vendorid', 'tpep_pickup_datetime']) }} as tripid,
     cast(vendorid as integer) as vendorid,
     cast(ratecodeid as integer) as ratecodeid,
     cast(pulocationid as integer) as  pickup_locationid,
@@ -17,7 +23,7 @@ select
     store_and_fwd_flag,
     cast(passenger_count as integer) as passenger_count,
     cast(trip_distance as numeric) as trip_distance,
-    cast(trip_type as integer) as trip_type,
+    1 as trip_type,
     
     -- payment info
     cast(fare_amount as numeric) as fare_amount,
@@ -31,8 +37,8 @@ select
     {{ get_payment_type_description('payment_type') }} as payment_type_description, 
     cast(congestion_surcharge as numeric) as congestion_surcharge
 
-from {{ source('staging', 'yellow_tripdata') }}
-where vendorid is not null
+from tripdata
+where rn = 1
 {% if var('is_test_run', default=true)%}
 
 limit 100
